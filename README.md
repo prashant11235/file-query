@@ -39,8 +39,9 @@ ________________________________________________________________________
 
 Q: How would your application perform in peak periods (millions of requests per/minute)? How would you optimize it?
 
-Performance (i.e. client side response latencies and server-throughput) degrades at high request load due to resource contention
-At the limit sever will drop requests with 503
+Performance (i.e. client side response latencies and server-throughput) degrades at high request load due to resource contention.
+
+At the limit sever will drop requests with 503 status code.
 
 For temporary spike in request load we can introduce a queue component - server picks requests from queue based on resource availability.
 
@@ -49,13 +50,15 @@ If the average request load is greater than server throughput we can:
 - Scaling - Vertical (at first) -> Horizontal
 
 a. Optimizing GET call processing
+
 Key idea: Small main-memory data-structure + Smart disk offload 
 
 Approaches:
 - Map-reduce paradigm - Need to store data in chunks - For each request create a fixed pool of goroutines and process a batch of chunks - Aggregate
   - Suitable for batch processing - not for online GET calls
 
-- Bloom-Filter - To efficiently identify the chunk which contains the requested identifier
+- Bloom-Filter - To efficiently identify the chunk which contains the requested identifier.
+
 We create a bloom-filter (a probabilistic data-structure for set membership) for each data-chunk
 
 For an incoming GET request:
@@ -81,13 +84,12 @@ func disk_offload(chunk_id, id) Promotion {
 ```
 
 Memory size required:
-~15 Mb file for 0.2 Million data-points => 75 MB file for 1 million data-points
-For 10 billion entries we have: file size = 10 * 1000 * 75 MB = 750 GB
-For 15 MB chunks - Number of chunks = 50,000
 
-For a false positive rate of 1% to store 0.2 Million entries we need ~250 KB per bloom filter.
-For 50K bloom-filters - this results in constant memory requirement of 1.25 GB
-Optimal number of hash-functions = 7
+- ~15 Mb file for 0.2 Million data-points => 75 MB file for 1 million data-points
+- For 10 billion entries we have: file size = 10 * 1000 * 75 MB = 750 GB
+- For 15 MB chunks - Number of chunks = 50,000
+- For a false positive rate of 1% to store 0.2 Million entries we need ~250 KB per bloom filter.
+- For 50K bloom-filters - this results in constant memory requirement of 1.25 GB (Optimal number of hash-functions = 7)
 
 Query processing 
 - Set membership check on 50K bloom-filters = 50K * O(k) where k = num hash-functions per filter = 0.35M operations
@@ -96,13 +98,14 @@ Query processing
 Depending on difference between disk-seek time and main-memory size optimal parameters can be chosen.
 
 b. Scaling
-Vertical scaling - We can utilize more powerful instances before going for horizontal scaling and adding distributed-system headaches!
-Horizontal scaling - As a last resort we can scale the system by adding additional nodes (details below)
+
+- Vertical scaling - We can utilize more powerful instances before going for horizontal scaling and adding distributed-system headaches!
+- Horizontal scaling - As a last resort we can scale the system by adding additional nodes (details below)
 ________________________________________________________________________
 
 Q: How would you operate this app in production (e.g. deployment, scaling, monitoring)
 
-Deployment - Is quite subjective depending on context (cost/incentive structure) - cloud, on-prem or hybrid
+**Deployment** - Is quite subjective depending on context (cost/incentive structure) - cloud, on-prem or hybrid
 
 General Objectives:
 - System upgrades should be transparent to users
@@ -119,10 +122,11 @@ Upgrade Approaches:
 
 In general it is difficult to make choices in this space without additional context.
 
-Scaling - esp. Horizontal scaling
-To facilitate our service for horizontal scaling - we need to make it stateless 
+**Scaling** - esp. Horizontal scaling
 
-Key idea: - we need to separate read and write paths
+To facilitate our service for horizontal scaling - we need to make it stateless.
+
+Key idea: - separate read and write paths
 
 Read-Replica pattern:
 - A main node - that processes write/update promotion immutably
@@ -134,7 +138,12 @@ NB: Read-replica approach makes sense over Leaderless since it seems that read r
 
 Once the service is stateless we can spin up multiple nodes and deploy our service on each node with a load-balancer in front acting as proxy.
 
-Monitoring 
+- If the data-size is too large we may also need to consider sharding - viz. partition data and make individual nodes responsible for a subset of data.
+  - Need to add consistent hashing to limit key redistribution in case of node unavailability
+
+
+**Monitoring**
+
 Which Stats to monitor?
 - Application - Load (requests/second), Responses (2xx, 4xx, 5xx), Latencies (median, p95, p99)
 - Infra - CPU usage, Memory consumption, Disk seek times etc.
